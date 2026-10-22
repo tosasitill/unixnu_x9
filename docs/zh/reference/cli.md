@@ -106,7 +106,7 @@ unixnu clean
 | `--target DEBUG\|RELEASE` | EDK II 目标 |
 | `--fd FILE` | bootimg 的固件卷 |
 | `--dtb FILE` | bootimg 的编译设备树 |
-| `--ramdisk FILE\|none` | bootimg 的 ramdisk |
+| `--ramdisk FILE\|none` | bootimg 的 ramdisk；`none` 表示不带 payload，板级配置可生成兼容空归档 |
 | `-o FILE`、`--output FILE` | 启动镜像输出 |
 
 ## 环境变量

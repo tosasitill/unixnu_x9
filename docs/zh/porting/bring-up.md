@@ -10,15 +10,11 @@ bring-up 按阶段推进。每个阶段都有可见结果和日志行，一次�
 
 - 固件卷大小匹配 `[uefi_fd] size`。
 - 启动镜像 header 满足 bootloader 要求。
-- `fastboot boot boot.img` 启动固件，不复位。
+- 按设备支持的刷写/启动流程测试。有些厂商 bootloader 不支持临时启动；X9 使用已确认可用的刷写路径，重启后读取持久化日志。
 - framebuffer 有输出，或串口有 UEFI 输出。
 - 块设备和负载卷可见。
 
-```sh
-fastboot boot out/<board>/boot/boot.img
-```
-
-固件停住后设备仍在 bootloader，再次启动同一镜像。
+不要仅凭黑屏判断固件没有执行：command-mode 面板可能要求固件主动发送完整帧。
 
 ## 阶段 2：UniXNU
 
@@ -26,12 +22,12 @@ fastboot boot out/<board>/boot/boot.img
 
 检查：
 
-- 串口行以 `UNIXNU:` 开头。
+- 从设备支持的控制台或持久化日志中确认 `UNIXNU:` 日志。
 - 日志报告 entry、driver、patch、ACPI、slice 和 kit 数量。
 - 菜单列出预期项。
 - 驱动失败显示数量和第一条失败原因。
 
-最小测试：空 ramdisk。UniXNU 使用内置配置并列出可移动加载器。
+最小测试：不带负载。若板级 bootloader 要求非零 ramdisk load target，板级配置会补一个有效的空 `newc` 归档；它不是 Linux 根文件系统。UniXNU 使用内置配置并列出可移动加载器。
 
 ```sh
 ./unixnu bootimg --uefi /path/to/Mu-Silicium --dtb board.dtb --ramdisk none
@@ -56,7 +52,7 @@ fastboot boot out/<board>/boot/boot.img
 
 检查：
 
-- 串口行以 `DARWINBOOT:` 开头。
+- 从设备支持的控制台或持久化日志中确认 `DARWINBOOT:` 日志。
 - 打印虚拟基址、物理基址、参数地址、入口地址。
 - 打印 framebuffer 基址、宽、高和深度。
 - 异常级别为 EL1。

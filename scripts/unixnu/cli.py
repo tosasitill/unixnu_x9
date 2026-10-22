@@ -52,7 +52,7 @@ def parser():
     i = sub.add_parser('bootimg', parents=[c], help='pack the boot image from the firmware volume and a device tree')
     i.add_argument('--fd', metavar='FILE', help='firmware volume (default: the build output under --uefi)')
     i.add_argument('--dtb', metavar='FILE', help='compiled device tree; or UNIXNU_DTB')
-    i.add_argument('--ramdisk', metavar='FILE', help='ramdisk image, or none (default: the payload step output when present, else empty)')
+    i.add_argument('--ramdisk', metavar='FILE', help='ramdisk image (default: payload if present), or none (a board may add an empty compatibility archive)')
     i.add_argument('-o', '--output', metavar='FILE', help='output (default: out/<device>/boot/boot.img)')
     w = sub.add_parser('ipsw', parents=[c], help='show or extract the components of the target IPSW')
     w.add_argument('action', choices=('info', 'fetch'))
@@ -71,7 +71,12 @@ def need_uefi(ctx):
     return uefi
 
 
-REFERENCES = {'kernel': ('xnu', 'libplatform', 'libdispatch', 'AvailabilityVersions'), 'package': ('edk2',), 'firmware': ('edk2',)}
+# The kernel step also needs the corecrypto source: CONFIG_XNU_SOURCE_CORECRYPTO14 compiles it, and
+# scripts/build-corecrypto-14.py reads refer/corecrypto-2023. Without it the kernel makefile stops at
+# "test -f build/corecrypto-2023/libcorecrypto_kernel_noasm-namespaced.a".
+REFERENCES = {'kernel': ('xnu', 'libplatform', 'libdispatch', 'AvailabilityVersions', 'corecrypto-2023',
+                            'libpthread'),
+              'package': ('edk2',), 'firmware': ('edk2',)}
 
 
 def prepare(ctx, steps=()):
@@ -147,7 +152,7 @@ def cmd_bootimg(ctx):
         ramdisk = expand(ctx.args.ramdisk)
     elif not ctx.args.ramdisk and payload.paths(ctx)[1].is_file():
         ramdisk = payload.paths(ctx)[1]
-        log(f'ramdisk: {ramdisk} (use --ramdisk none for an empty one)')
+        log(f'ramdisk: {ramdisk} (use --ramdisk none for the board-compatible empty archive)')
     bootimg.build(ctx, uefi, fd, dtb, ramdisk, expand(ctx.args.output) if ctx.args.output else None)
 
 

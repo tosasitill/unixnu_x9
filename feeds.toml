@@ -49,3 +49,22 @@ submodules = [
   "MdeModulePkg/Library/BrotliCustomDecompressLib/brotli",
   "SecurityPkg/DeviceSecurity/SpdmLib/libspdm",
 ]
+
+# corecrypto 14 for CONFIG_XNU_SOURCE_CORECRYPTO14. The snapshot repository is third party: it is
+# pinned by revision, and scripts/build-corecrypto-14.py records the provenance as
+# "not authenticated against an Apple archive". It is not an Apple release artifact.
+[[source]]
+name = "corecrypto-2023"
+kind = "refer"
+git = "https://github.com/ONLYA/corecrypto-2023"
+ref = "main"
+commit = "11fba65b12d8830630e248dfa8344caf8b065f26"
+
+# libpthread supplies the kernel-side pthread registration that CONFIG_XNU_SOURCE_PTHREAD needs.
+# 519.120.4 is the Darwin 23 line that matches the xnu pin above.
+[[source]]
+name = "libpthread"
+kind = "refer"
+git = "https://github.com/apple-oss-distributions/libpthread.git"
+ref = "libpthread-519.120.4"
+commit = "c0e60fb5ecfc54cf379c261d3f9572cc22ded891"

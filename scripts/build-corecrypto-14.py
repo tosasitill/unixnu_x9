@@ -13,8 +13,13 @@ import subprocess
 import struct
 import sys
 
+# This script runs both from the repository (scripts/) and from an assembled build tree
+# (out/<board>/tree/scripts/). ROOT is the directory that holds refer/, build/ and .cache/: in the
+# tree that is the tree itself, in the repository it is the checkout.
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / 'refer/corecrypto-2023'
+if not (ROOT / 'refer').is_dir() and (ROOT / 'tree/refer').is_dir():
+    ROOT = ROOT / 'tree'
+SOURCE = (ROOT / 'refer/corecrypto-2023').resolve()
 REVISION = '11fba65b12d8830630e248dfa8344caf8b065f26'
 OUT = ROOT / 'build/corecrypto-2023'
 parser = argparse.ArgumentParser(description=__doc__)
@@ -81,7 +86,26 @@ if args.namespace:
     plain = OUT / 'libcorecrypto_kernel_noasm.a'
     if not plain.is_file():
         raise SystemExit('Build the plain provider once before creating its namespace')
-    collisions = sorted(names(plain, '-U') & names(kernel, '-U'))
+    # The namespace pass needs the kernel's global symbols. On a first build the kernel binary does not
+    # exist yet, because linking it is what consumes this archive. In that case use the union of the
+    # compiled kernel objects: same translation units, same symbol table, available before the link.
+    if kernel.is_file():
+        kernel_symbols = names(kernel, '-U')
+        symbol_source = str(kernel)
+    else:
+        objects_root = ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837'
+        compiled = sorted(objects_root.rglob('*.o'))
+        if not compiled:
+            raise SystemExit(f'neither {kernel} nor compiled kernel objects exist under {objects_root}: '
+                             'run "unixnu build kernel" far enough to compile the kernel before --namespace')
+        kernel_symbols = set()
+        for path in compiled:
+            try:
+                kernel_symbols |= names(path, '-U')
+            except subprocess.CalledProcessError:
+                continue
+        symbol_source = f'{len(compiled)} compiled kernel objects under {objects_root}'
+    collisions = sorted(names(plain, '-U') & kernel_symbols)
     if any(not name[1:].isidentifier() for name in collisions):
         raise SystemExit('A colliding symbol cannot be namespaced with a C identifier')
     header = OUT / 'namespace.h'
@@ -144,6 +168,7 @@ survey = {'unresolved_external_names': sorted(undefined), 'missing_kernel_names'
 report['object_architecture_and_deployment_audited'] = len(results)
 report['archive_sha256'] = hashlib.sha256(archive.read_bytes()).hexdigest()
 report['namespace_isolated'] = args.namespace
+report['namespace_symbol_source'] = symbol_source
 (OUT / f'build-report{variant}.json').write_text(json.dumps(report, indent=2) + '\n')
 print(f'Internal unregistered provider archive: {archive.name}')
 print(f'External names absent from kernel: {survey["missing_kernel_names"]}')

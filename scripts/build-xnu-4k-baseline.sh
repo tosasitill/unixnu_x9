@@ -523,7 +523,12 @@ else
 fi
 if [ "${XNU_SOURCE_CORECRYPTO14:-0}" = 1 ]; then
   CRYPTO_ARCHIVE=$ROOT/build/corecrypto-2023/libcorecrypto_kernel_noasm-namespaced.a
-  test -f "$CRYPTO_ARCHIVE"
+  if [ ! -f "$CRYPTO_ARCHIVE" ]; then
+    echo "Missing $CRYPTO_ARCHIVE" >&2
+    echo 'Build it with: python3 scripts/build-corecrypto-14.py (plain), then --namespace once the kernel binary exists' >&2
+    echo 'The namespace pass compares provider globals against the kernel symbol table, so it needs one kernel link first.' >&2
+    exit 1
+  fi
   EXTRA_CFLAGS="$EXTRA_CFLAGS -DXNU_SOURCE_CORECRYPTO14=1"
   KERNEL_EXTRA_ARCHIVES="-L$KERNEL_SDKROOT/usr/local/lib/kernel -lfirehose_kernel $CRYPTO_ARCHIVE"
   KERNEL_ARCHIVE_DEPENDENCIES=$CRYPTO_ARCHIVE
@@ -556,6 +561,18 @@ if [ "${XNU_SOURCE_CORECRYPTO14:-0}" = 1 ]; then
     test -f "$ARMVIRT_ARCHIVE"
     KERNEL_EXTRA_ARCHIVES="$KERNEL_EXTRA_ARCHIVES -Wl,-force_load,$ARMVIRT_ARCHIVE"
     KERNEL_ARCHIVE_DEPENDENCIES="$KERNEL_ARCHIVE_DEPENDENCIES $ARMVIRT_ARCHIVE"
+  fi
+  # The device drivers are separate archives, and their recipe needs the recorded kernel flags,
+  # which only exist after the first object build. Build them here, from those records, so a clean
+  # tree does not need a manual preparation step.
+  if [ "$ARM_DT_PLATFORM" = 1 ] || [ "${XNU_ARMCPU:-0}" = 1 ]; then
+    if [ ! -f "$ROOT/build/armdt-platform/libArmDTPlatform.a" ] || \
+       { [ "${XNU_ARMCPU:-0}" = 1 ] && [ ! -f "$ROOT/build/armcpu/libArmCpu.a" ]; }; then
+      python3 scripts/build-x9-archives.py --tree "$ROOT" --only armdt-platform --only armcpu || {
+        echo 'device archive build failed; see the messages above' >&2
+        exit 1
+      }
+    fi
   fi
   if [ "$ARM_DT_PLATFORM" = 1 ]; then
     ARM_DT_ARCHIVE=$ROOT/build/armdt-platform/libArmDTPlatform.a
@@ -681,6 +698,20 @@ PY_BINDINGS
   if [ "${XNU_SOURCE_PTHREAD:-0}" = 1 ]; then
     PTHREAD_ARCHIVE=$ROOT/build/libpthread-kernel/libpthread_kernel.a
     PTHREAD_BOOTSTRAP=$ROOT/build/libpthread-kernel/source_pthread_bootstrap.o
+    if [ ! -f "$PTHREAD_ARCHIVE" ] || [ ! -f "$PTHREAD_BOOTSTRAP" ]; then
+      # The pthread recipe isolates the names that the kernel already defines, so it reads the
+      # linked kernel. That is a cycle on a clean tree: the first kernel link runs without the
+      # pthread component, and this step then publishes it from that link. Say so instead of
+      # leaving a bare "test -f" failure, which set -e turns into a silent stop.
+      KERNEL_FOR_PTHREAD=$ROOT/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf
+      if [ ! -f "$KERNEL_FOR_PTHREAD" ]; then
+        echo 'XNU_SOURCE_PTHREAD=1 needs a linked kernel to audit against; run once with XNU_SOURCE_PTHREAD=0' >&2
+        exit 1
+      fi
+      mkdir -p "$ROOT/build/xnu/checkpoints/native-4k-user-abi"
+      cp "$KERNEL_FOR_PTHREAD" "$ROOT/build/xnu/checkpoints/native-4k-user-abi/kernel.macho"
+      python3 scripts/build-libpthread-kernel.py
+    fi
     test -f "$PTHREAD_ARCHIVE"
     test -f "$PTHREAD_BOOTSTRAP"
     KERNEL_EXTRA_ARCHIVES="$KERNEL_EXTRA_ARCHIVES -Wl,-force_load,$PTHREAD_ARCHIVE"

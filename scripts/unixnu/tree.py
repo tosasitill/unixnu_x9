@@ -50,8 +50,16 @@ def assemble(ctx, modules):
     for (kind, name), module in sorted(modules.items()):
         if module.path is None:
             if kind == 'refer':
-                continue   # fetched when a step needs it
-            raise Error(f'{kind} {name} has no source yet; run "unixnu fetch"')
+                # A refer source that has already been fetched is linked now, so "unixnu tree" alone
+                # produces a complete tree; one that is not fetched yet is left to the step that needs it.
+                # feeds._clone_dir owns the checkout naming, so reuse it instead of duplicating the hash.
+                from .feeds import _clone_dir
+                directory = _clone_dir(ctx, module.source)
+                if not (directory / '.git').is_dir():
+                    continue
+                module.path = directory
+            else:
+                raise Error(f'{kind} {name} has no source yet; run "unixnu fetch"')
         if kind == 'package':
             if name == 'main':
                 _link(module.path, tree / 'package')

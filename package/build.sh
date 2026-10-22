@@ -61,8 +61,25 @@ export PATH=$EDK_TOOLS_PATH/BinWrappers/PosixLike:$EDK_TOOLS_PATH/Source/C/bin:$
 case $TOOLCHAIN in
   CLANGPDB)
     if [ -z "${CLANG_BIN:-}" ]; then
-      CLANG=$(command -v clang) || { echo "error: clang not found" >&2; exit 1; }
-      CLANG_BIN=$(dirname "$CLANG")/
+      SCRIPTS_DIR="$ROOT/../scripts"
+      if [ -f "$SCRIPTS_DIR/unixnu/util.py" ]; then
+        CLANG_BIN=$("$PYTHON_COMMAND" - "$SCRIPTS_DIR" "$BUILD_DIR/Build/Toolchain/CLANGPDB" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from unixnu.util import clang_bin
+print(clang_bin(Path(sys.argv[2])))
+PY
+)
+        CLANG_BIN="${CLANG_BIN%/}/"
+      else
+        CLANG=$(command -v clang) || { echo "error: clang not found" >&2; exit 1; }
+        CLANG_BIN=$(dirname "$CLANG")/
+        if ! "$CLANG_BIN/lld-link" --version >/dev/null 2>&1; then
+          echo "error: lld-link is not usable from $CLANG_BIN; set CLANG_BIN to a matched LLVM/LLD toolchain" >&2
+          exit 1
+        fi
+      fi
     fi
     export CLANG_BIN
     ;;

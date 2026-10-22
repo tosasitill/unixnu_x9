@@ -54,7 +54,18 @@ def compile_one(source, destination, namespace=None):
                    '-I', str(framework / 'PrivateHeaders'), '-I', str(framework / 'Headers'),
                    '-Wno-deprecated-declarations', '-c', str(source), '-o', str(destination)]
     if namespace:
-        command += ['-include', str(namespace)]
+        # The forced header has to precede the input file: a -include placed after it is still
+        # accepted, but the macros are then defined too late to rewrite the identifiers the source
+        # already declared.
+        # Insert before the input file. The recorded argv has no -c and names the source directly,
+        # so anchoring on -c or -o would place the forced header after the source and the macros
+        # would arrive too late.
+        source_index = next((index for index, value in enumerate(command)
+                             if value.endswith(('.c', '.cpp', '.cc', '.cxx'))), None)
+        if source_index is None:
+            anchors = [command.index(flag) for flag in ('-c', '-o') if flag in command]
+            source_index = min(anchors) if anchors else len(command)
+        command[source_index:source_index] = ['-include', str(namespace)]
     result = subprocess.run(command, cwd=record['directory'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     destination.with_suffix('.log').write_text(result.stdout)
     if result.returncode:
@@ -109,6 +120,11 @@ if missing:
     raise SystemExit(f'Unavailable real kernel imports: {missing}')
 archive = OUT / 'libpthread_kernel.a'
 archive.unlink(missing_ok=True)
-compile_one(ROOT / '.cache/xnu-work/bsd/kern/source_pthread_bootstrap.c', OUT / 'source_pthread_bootstrap.o')
+# The bootstrap calls pthread_start, which the isolation above renamed because the kernel defines
+# the same name. Compile the bootstrap with the same namespace, or the archive exports an isolated
+# entry point that nothing calls and imports an original one that no component defines.
+compile_one(ROOT / '.cache/xnu-work/bsd/kern/source_pthread_bootstrap.c',
+            OUT / 'source_pthread_bootstrap.o',
+            (OUT / 'namespace.h') if (OUT / 'namespace.h').is_file() else None)
 subprocess.run(['xcrun', 'ar', 'rcs', archive, *objects, OUT / 'source_pthread_bootstrap.o'], check=True)
 print('Matching libpthread: 3 real C sources + bootstrap, ARM64/iOS 17 audit, no unavailable kernel names')

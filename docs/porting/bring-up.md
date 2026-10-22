@@ -10,17 +10,11 @@ Checks:
 
 - The firmware volume size matches `[uefi_fd] size`.
 - The boot image header matches the bootloader requirement.
-- `fastboot boot boot.img` starts the firmware without a reset.
-- The framebuffer shows output, or the serial port shows UEFI output.
+- Use the board's supported flash-and-boot workflow. Some vendor bootloaders do not support temporary boot; for the X9, use the established flash path and inspect persistent logs after reboot.
+- The framebuffer shows output, or an available console shows UEFI output.
 - Block devices and the payload volume are visible.
 
-Tools:
-
-```sh
-fastboot boot out/<board>/boot/boot.img
-```
-
-A firmware stall leaves the device in the bootloader. Start the same image again.
+Do not infer that firmware did not execute solely from a black display: command-mode panels may require explicit frame transmission.
 
 ## Stage 2: UniXNU
 
@@ -28,12 +22,12 @@ Goal: the menu appears and the configuration is parsed.
 
 Checks:
 
-- Serial lines start with `UNIXNU:`.
+- Logs are available from the board's supported console or persistent logging path.
 - The log reports the entry, driver, patch, ACPI, slice and kit counts.
 - The menu lists the expected entries.
 - Driver failures show a count and the first failure reason.
 
-Minimal test: an empty ramdisk. UniXNU falls back to its built-in configuration and lists removable loaders.
+Minimal test: no payload. On boards that require a non-zero ramdisk load target, the board config inserts a valid empty `newc` archive; it is not a Linux root filesystem. UniXNU falls back to its built-in configuration and lists removable loaders.
 
 ```sh
 ./unixnu bootimg --uefi /path/to/Mu-Silicium --dtb board.dtb --ramdisk none
@@ -58,7 +52,7 @@ Goal: DarwinBoot validates the kernel, the ADT and the trust cache, then exits b
 
 Checks:
 
-- Serial lines start with `DARWINBOOT:`.
+- Logs are available from the board's supported console or persistent logging path.
 - The loader prints the virtual base, physical base, arguments address and entry address.
 - The printed output shows the framebuffer base, width, height and depth.
 - The exception level is EL1.

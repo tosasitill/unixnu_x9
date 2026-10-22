@@ -149,7 +149,7 @@ userdata 步骤构建 `userdata` 分区的原始镜像，保存 IPSW 中未修�
 5. 用 Mu-Silicium 设备配置中的参数调用 `mkbootimg.py`。
 6. 解包镜像并逐部分与输入比较。
 
-ramdisk 优先使用负载输出，也可以用 `--ramdisk FILE`，或用 `--ramdisk none` 使用空 ramdisk。
+ramdisk 优先使用负载输出，也可以用 `--ramdisk FILE`，或用 `--ramdisk none` 表示没有 payload。若板级 bootloader 要求非零 ramdisk 地址，板级配置可以自动生成一个很小的有效空归档。
 
 ## 本地模块
 

@@ -151,7 +151,7 @@ The boot image step:
 5. Packs the result with `mkbootimg.py` and the image parameters of the Mu-Silicium device configuration.
 6. Unpacks the image and compares every part with its input.
 
-The ramdisk is the payload output when it exists, `--ramdisk FILE`, or an empty ramdisk with `--ramdisk none`.
+The ramdisk is the payload output when it exists, `--ramdisk FILE`, or no payload with `--ramdisk none`. A board may synthesize a small, valid empty archive when its bootloader requires a non-zero ramdisk target.
 
 ## Local modules
 

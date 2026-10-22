@@ -8,6 +8,9 @@
 /.local*/
 /Mu_Basecore/
 
+# EDK II package outputs
+/package/Build/
+
 # Documentation site
 /docs/node_modules/
 /docs/.vitepress/dist/

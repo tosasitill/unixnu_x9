@@ -106,7 +106,7 @@ Removes `tree`, `logs`, `kernel`, `package`, `boot` and `edk2-conf` under the bo
 | `--target DEBUG\|RELEASE` | EDK II target |
 | `--fd FILE` | Firmware volume for bootimg |
 | `--dtb FILE` | Compiled device tree for bootimg |
-| `--ramdisk FILE\|none` | Ramdisk for bootimg |
+| `--ramdisk FILE\|none` | Ramdisk image; `none` means no payload, with an optional board-specific empty compatibility archive |
 | `-o FILE`, `--output FILE` | Boot image output |
 
 ## Environment

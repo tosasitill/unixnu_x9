@@ -44,9 +44,11 @@ def build(ctx, modules):
     script = ctx.tree / 'scripts/build-xnu-4k-baseline.sh'
     if not script.is_file():
         raise Error(f'{script} missing')
-    env = dict(os.environ)
-    env.update(xnu_env(ctx))
-    env.update(version_env(modules))
+    # The defconfig is the recorded device configuration, but an explicit variable in the caller's
+    # environment has to win: without that, a documented one-off switch such as
+    # XNU_SOURCE_PTHREAD=0 for the first pass cannot be exercised at all.
+    configured = {**version_env(modules), **xnu_env(ctx)}
+    env = {**configured, **os.environ}
     env['JOBS'] = str(ctx.jobs)
     record = ctx.tree / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o.json'
     if env.get('XNU_BOOT_PROGRESS') == '1' and not record.is_file():

@@ -1,6 +1,7 @@
 """Small helpers shared by the build driver."""
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -70,16 +71,76 @@ def git(repo, *args, capture=True):
 CLANGPDB_TOOLS = ('clang', 'lld-link', 'llvm-lib', 'llvm-rc')
 
 
-def clang_bin(directory):
-    """A directory with the tools EDK II's CLANGPDB tool chain expects (CLANG_BIN), linked from wherever they are.
+def _tool_major_version(executable):
+    try:
+        result = subprocess.run([str(executable), '--version'], check=True, capture_output=True, text=True)
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise Error(f'cannot query {executable} version: {error}') from error
+    output = result.stdout + result.stderr
+    match = re.search(r'\bversion\s+(\d+)(?:\.\d+)*', output, re.IGNORECASE)
+    if match is None:
+        match = re.search(r'\bLLD\s+(\d+)(?:\.\d+)*', output, re.IGNORECASE)
+    if match is None:
+        raise Error(f'cannot parse tool version from {executable}: {output.splitlines()[0]}')
+    return int(match.group(1))
 
-    Apple's clang has no llvm-lib or lld-link, so the Homebrew LLVM and lld are used.
+
+def clang_bin(directory):
+    """Create a CLANGPDB tool set from LLVM/LLD builds with matching majors.
+
+    On macOS, Homebrew may put an older standalone lld first on PATH while
+    clang and its dylibs come from a newer LLVM keg. Resolve a matched pair
+    before falling back to PATH, and reject a mismatched fallback explicitly.
     """
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
+
+    pair = None
+    for prefix in (Path('/opt/homebrew'), Path('/usr/local')):
+        opt = prefix / 'opt'
+        llvm_bins = [opt / 'llvm' / 'bin']
+        llvm_bins.extend(sorted(opt.glob('llvm@*/bin')))
+        for llvm_bin in llvm_bins:
+            clang = llvm_bin / 'clang'
+            if not clang.exists():
+                continue
+            try:
+                major = _tool_major_version(clang)
+            except Error:
+                continue
+            lld_bins = (opt / f'lld@{major}' / 'bin', opt / 'lld' / 'bin')
+            for lld_bin in lld_bins:
+                linker = lld_bin / 'lld-link'
+                if linker.exists() and _tool_major_version(linker) == major:
+                    pair = (llvm_bin, lld_bin)
+                    break
+            if pair is not None:
+                break
+        if pair is not None:
+            break
+
+    if pair is None:
+        clang = Path(tool('clang', 'install a matching LLVM/LLD toolchain'))
+        linker = Path(tool('lld-link', 'install a matching LLVM/LLD toolchain'))
+        clang_major = _tool_major_version(clang)
+        linker_major = _tool_major_version(linker)
+        if clang_major != linker_major:
+            raise Error(f'clang {clang_major} and lld-link {linker_major} are incompatible; install matching LLVM/LLD versions')
+        llvm_bin, lld_bin = clang.parent, linker.parent
+    else:
+        llvm_bin, lld_bin = pair
+
+    targets = {
+        'clang': llvm_bin / 'clang',
+        'lld-link': lld_bin / 'lld-link',
+        'llvm-lib': llvm_bin / 'llvm-lib',
+        'llvm-rc': llvm_bin / 'llvm-rc',
+    }
     for name in CLANGPDB_TOOLS:
         link = directory / name
-        target = tool(name, 'brew install llvm lld')
+        target = targets[name]
+        if not target.exists():
+            target = Path(tool(name, 'install the matching LLVM/LLD toolchain'))
         if link.is_symlink() or link.exists():
             link.unlink()
         link.symlink_to(target)
